@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(github.com)",
+      "Bash(cargo check)"
+    ]
+  },
+  "$version": 3
+}

@@ -1,0 +1,120 @@
+// scene.slint — UI плеера
+
+import { Theme } from "Theme.slint";
+
+export struct PlayerState {
+    is_paused: bool,
+    seek_position: float,
+    new_position: float,
+    position_ackd: bool,
+    ts_label: string,
+    window_width: float,
+    window_height: float,
+}
+
+export component MainWindow inherits Window {
+    width: Theme.window-width;
+    height: Theme.window-height;
+    title: "";
+    default-font-family: Theme.font-family;
+
+    in-out property<PlayerState> player-state;
+    callback esc-pressed();
+    callback control-key-pressed(string);
+
+    background: Theme.color-bg-primary;
+
+    // FocusScope — первый в иерархии, перехватывает ESC ДО TextInput
+    FocusScope {
+        x: 0px; y: 0px;
+        width: parent.width;
+        height: parent.height;
+
+        // capture-key-pressed вызывается ДО того как событие дойдёт до дочерних элементов
+        capture-key-pressed(event) => {
+            if (event.text == " ") {
+                return EventResult.reject;
+            }
+            // Все control-символы — передаём текст в Rust для анализа
+            if (event.text < " ") {
+                root.control-key-pressed(event.text);
+                return EventResult.accept;
+            }
+            EventResult.reject
+        }
+
+        // TextInput — получает фокус при клике
+        TextInput {
+            x: 0px; y: 0px;
+            width: parent.width;
+            height: parent.height;
+            color: #00000000;
+            text: "";
+            read-only: true;
+            enabled: true;
+
+            key-pressed(event) => {
+                if (event.text == " ") {
+                    root.player-state.is_paused = !root.player-state.is_paused;
+                    accept;
+                }
+                reject;
+            }
+        }
+    }
+
+    // Контрол-бар внизу экрана
+    Rectangle {
+        background: Theme.color-bg-surface;
+        height: Theme.control-bar-height;
+        y: parent.height - self.height;
+        x: 0px;
+        width: parent.width;
+        opacity: 0.95;
+
+        HorizontalLayout {
+            padding: Theme.control-padding;
+            spacing: 12px;
+
+            Rectangle {
+                width: Theme.button-size;
+                height: Theme.button-size;
+                border-radius: Theme.border-radius;
+                background: root.player-state.is_paused ? Theme.color-accent : Theme.color-bg-elevated;
+
+                Text {
+                    text: root.player-state.is_paused ? "▶" : "⏸";
+                    color: root.player-state.is_paused ? Theme.color-bg-primary : Theme.color-text-primary;
+                    font-size: Theme.font-size-large;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                TouchArea {
+                    clicked => { root.player-state.is_paused = !root.player-state.is_paused; }
+                }
+            }
+
+            Rectangle {
+                height: Theme.progress-bar-height;
+                background: Theme.color-progress-track;
+                border-radius: Theme.progress-bar-height / 2;
+
+                Rectangle {
+                    width: parent.width * root.player-state.seek_position;
+                    height: parent.height;
+                    background: Theme.color-progress-fill;
+                    border-radius: Theme.progress-bar-height / 2;
+                }
+                TouchArea { clicked => {} }
+            }
+
+            Text {
+                text: root.player-state.ts_label;
+                color: Theme.color-text-secondary;
+                font-size: Theme.font-size-small;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

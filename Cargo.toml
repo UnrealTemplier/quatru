@@ -1,0 +1,14 @@
+[package]
+name = "quatru"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+license = "MIT"
+
+[dependencies]
+slint = "1.9"
+glow = "0.16"
+libloading = "0.8"
+
+[build-dependencies]
+slint-build = "1.9"
