@@ -14,15 +14,23 @@ export global Theme {
     in-out property<color> color-border: #282828;
     in-out property<color> color-progress-track: #404040;
     in-out property<color> color-progress-fill: #1db954;
+    in-out property<color> color-progress-thumb: #1ed760;
 
     // Размеры
     in-out property<length> window-width: 1200px;
     in-out property<length> window-height: 800px;
-    in-out property<length> control-bar-height: 72px;
-    in-out property<length> control-padding: 16px;
-    in-out property<length> progress-bar-height: 6px;
-    in-out property<length> button-size: 40px;
+    in-out property<length> control-bar-height: 80px;
+    in-out property<length> control-bar-padding-h: 20px;
+    in-out property<length> control-bar-padding-v: 12px;
+    in-out property<length> progress-track-height: 6px;
+    in-out property<length> progress-thumb-size: 14px;
+    in-out property<length> play-btn-size: 40px;
+    in-out property<length> play-btn-radius: 20px;
+    in-out property<length> time-label-width: 80px;
     in-out property<length> border-radius: 8px;
+
+    // Анимации
+    in-out property<duration> animation-duration: 150ms;
 
     // Шрифты
     in-out property<string> font-family: "Inter";

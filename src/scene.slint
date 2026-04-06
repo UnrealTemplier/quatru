@@ -1,4 +1,4 @@
-// scene.slint — UI плеера
+// scene.slint — UI плеера (Спринт 3: премиальный control bar)
 
 import { Theme } from "Theme.slint";
 
@@ -10,6 +10,101 @@ export struct PlayerState {
     ts_label: string,
     window_width: float,
     window_height: float,
+    elapsed_label: string,
+    duration_label: string,
+}
+
+// Кастомная кнопка Play/Pause с hover/pressed анимациями
+component PlayButton inherits Rectangle {
+    width: Theme.play-btn-size;
+    height: Theme.play-btn-size;
+
+    in-out property<bool> is-playing: false;
+    callback clicked();
+
+    btn-bg := Rectangle {
+        width: parent.width - 4px;
+        height: parent.height - 4px;
+        x: 2px;
+        y: 2px;
+        border-radius: Theme.play-btn-radius;
+        background: {
+            if (btn-touch.pressed) { Theme.color-accent; }
+            else if (btn-touch.has-hover) { Theme.color-accent-hover; }
+            else { Theme.color-bg-elevated; }
+        }
+        animate background { duration: Theme.animation-duration; }
+
+        Text {
+            text: root.is-playing ? "⏸" : "▶";
+            color: {
+                if (btn-touch.pressed || btn-touch.has-hover) { Theme.color-bg-primary; }
+                else { Theme.color-text-primary; }
+            }
+            font-size: Theme.font-size-large;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        btn-touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.clicked(); }
+        }
+    }
+}
+
+// Кастомный слайдер-таймлайн с thumb и hover-эффектами
+component TimelineSlider inherits Rectangle {
+    height: Theme.progress-track-height;
+    background: Theme.color-progress-track;
+    border-radius: Theme.progress-track-height / 2;
+
+    in-out property<float> progress: 0.0;
+    callback seek-requested(float);
+
+    // Заполненная часть
+    Rectangle {
+        width: parent.width * root.progress;
+        height: parent.height;
+        background: Theme.color-progress-fill;
+        border-radius: parent.border-radius;
+    }
+
+    // Thumb (ползунок)
+    thumb-rect := Rectangle {
+        x: parent.width * root.progress - Theme.progress-thumb-size / 2;
+        y: (parent.height - Theme.progress-thumb-size) / 2;
+        width: Theme.progress-thumb-size;
+        height: Theme.progress-thumb-size;
+        border-radius: Theme.progress-thumb-size / 2;
+        background: {
+            if (thumb-touch.pressed) { Theme.color-accent-hover; }
+            else if (thumb-touch.has-hover) { Theme.color-accent; }
+            else { Theme.color-text-primary; }
+        }
+        opacity: thumb-touch.has-hover || thumb-touch.pressed ? 1.0 : 0.0;
+        animate opacity { duration: Theme.animation-duration; }
+        animate background { duration: Theme.animation-duration; }
+
+        thumb-touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                let ratio = self.mouse-x / root.width;
+                let clamped = min(1.0, max(0.0, ratio));
+                root.seek-requested(clamped);
+            }
+        }
+    }
+
+    // Клик по треку вне thumb
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            let ratio = self.mouse-x / root.width;
+            let clamped = min(1.0, max(0.0, ratio));
+            root.seek-requested(clamped);
+        }
+    }
 }
 
 export component MainWindow inherits Window {
@@ -22,8 +117,59 @@ export component MainWindow inherits Window {
     in-out property<PlayerState> player-state;
     callback esc-pressed();
     callback control-key-pressed(string);
+    callback play-pause-requested();
+    callback seek-requested(float);
 
-    background: Theme.color-bg-primary;
+    background: transparent;
+
+    // Control Bar внизу экрана (поверх видео-рендеринга)
+    control-bar := Rectangle {
+        background: Theme.color-bg-surface;
+        height: Theme.control-bar-height;
+        y: parent.height - self.height;
+        x: 0px;
+        width: parent.width;
+        opacity: 0.95;
+
+        HorizontalLayout {
+            padding-left: Theme.control-bar-padding-h;
+            padding-right: Theme.control-bar-padding-h;
+            padding-top: Theme.control-bar-padding-v;
+            padding-bottom: Theme.control-bar-padding-v;
+            spacing: 16px;
+
+            // Время: прошло
+            Text {
+                text: root.player-state.elapsed_label;
+                color: Theme.color-text-secondary;
+                font-size: Theme.font-size-small;
+                vertical-alignment: center;
+                min-width: Theme.time-label-width;
+            }
+
+            // Кнопка Play/Pause
+            PlayButton {
+                is-playing: !root.player-state.is_paused;
+                clicked => { root.play-pause-requested(); }
+            }
+
+            // Таймлайн-слайдер
+            TimelineSlider {
+                progress: root.player-state.seek_position;
+                seek-requested(ratio) => { root.seek-requested(ratio); }
+            }
+
+            // Время: всего
+            Text {
+                text: root.player-state.duration_label;
+                color: Theme.color-text-secondary;
+                font-size: Theme.font-size-small;
+                vertical-alignment: center;
+                min-width: Theme.time-label-width;
+                horizontal-alignment: center;
+            }
+        }
+    }
 
     // FocusScope — первый в иерархии, перехватывает ESC ДО TextInput
     key-handler := FocusScope {
@@ -33,13 +179,11 @@ export component MainWindow inherits Window {
 
         init => { self.focus(); }
 
-        // capture-key-pressed вызывается ДО того как событие дойдёт до дочерних элементов
         capture-key-pressed(event) => {
             if (event.text == " ") {
                 root.player-state.is_paused = !root.player-state.is_paused;
                 return EventResult.accept;
             }
-            // Все control-символы — передаём текст в Rust для анализа
             if (event.text < " ") {
                 root.control-key-pressed(event.text);
                 return EventResult.accept;
@@ -47,7 +191,6 @@ export component MainWindow inherits Window {
             EventResult.reject
         }
 
-        // Вложенный FocusScope с key-pressed для удержания фокуса
         keyboard-target := FocusScope {
             width: parent.width;
             height: parent.height;
@@ -58,61 +201,6 @@ export component MainWindow inherits Window {
                     accept;
                 }
                 reject;
-            }
-        }
-    }
-
-    // Контрол-бар внизу экрана
-    control-bar := Rectangle {
-        background: Theme.color-bg-surface;
-        height: Theme.control-bar-height;
-        y: parent.height - self.height;
-        x: 0px;
-        width: parent.width;
-        opacity: 0.95;
-
-        HorizontalLayout {
-            padding: Theme.control-padding;
-            spacing: 12px;
-
-            Rectangle {
-                width: Theme.button-size;
-                height: Theme.button-size;
-                border-radius: Theme.border-radius;
-                background: root.player-state.is_paused ? Theme.color-accent : Theme.color-bg-elevated;
-
-                Text {
-                    text: root.player-state.is_paused ? "▶" : "⏸";
-                    color: root.player-state.is_paused ? Theme.color-bg-primary : Theme.color-text-primary;
-                    font-size: Theme.font-size-large;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-
-                TouchArea {
-                    clicked => { root.player-state.is_paused = !root.player-state.is_paused; }
-                }
-            }
-
-            Rectangle {
-                height: Theme.progress-bar-height;
-                background: Theme.color-progress-track;
-                border-radius: Theme.progress-bar-height / 2;
-
-                Rectangle {
-                    width: parent.width * root.player-state.seek_position;
-                    height: parent.height;
-                    background: Theme.color-progress-fill;
-                    border-radius: Theme.progress-bar-height / 2;
-                }
-                TouchArea { clicked => {} }
-            }
-
-            Text {
-                text: root.player-state.ts_label;
-                color: Theme.color-text-secondary;
-                font-size: Theme.font-size-small;
-                vertical-alignment: center;
             }
         }
     }

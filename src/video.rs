@@ -12,7 +12,13 @@ use crate::mpv::{
 /// Команды от UI к mpv
 pub enum MpvCommand { Play, Pause, SeekAbsolute(f64) }
 /// Состояние mpv, отправляемое в UI через mpsc
-pub struct MpvState { pub position: f32, pub duration: f32, pub ts_label: String }
+pub struct MpvState {
+    pub position: f32,
+    pub duration: f32,
+    pub ts_label: String,
+    pub elapsed_label: String,
+    pub duration_label: String,
+}
 
 // Мост: mpv вызывает эту функцию для получения GL-процедур,
 // мы делегируем в closure, сохранённый через gpa_raw.
@@ -96,7 +102,7 @@ impl VideoUnderlay {
             let c_mode = CString::new("replace").unwrap();
             let args: [*const c_char; 4] = [c_load.as_ptr(), c_file.as_ptr(), c_mode.as_ptr(), std::ptr::null()];
             if mpv_lib.command(handle, args.as_ptr()) != 0 {
-                eprintln!("Warning: mpv loadfile returned error");
+                eprintln!("Warning: mpv loadfile returned error for: {}", file);
             }
 
             // GL объекты
@@ -168,8 +174,26 @@ impl VideoUnderlay {
         fn p(s: f32) -> String { let t=s as i64; format!("{:02}:{:02}:{:02}",t/3600,(t%3600)/60,t%60) }
         format!("{} / {}", p(self.get_position().unwrap_or(0.0)), p(self.get_duration().unwrap_or(0.0)))
     }
+    /// Метка elapsed: "MM:SS"
+    pub fn get_elapsed_label(&self) -> String {
+        let s = self.get_position().unwrap_or(0.0) as i64;
+        format!("{:02}:{:02}", s/60, s%60)
+    }
+    /// Метка duration: "MM:SS"
+    pub fn get_duration_label(&self) -> String {
+        let s = self.get_duration().unwrap_or(0.0) as i64;
+        format!("{:02}:{:02}", s/60, s%60)
+    }
     /// Отправляет текущее состояние в UI через mpsc
-    pub fn send_state(&self) { let _ = self.tx_state.send(MpvState { position: self.get_position().unwrap_or(0.0), duration: self.get_duration().unwrap_or(0.0), ts_label: self.get_ts_label() }); }
+    pub fn send_state(&self) {
+        let _ = self.tx_state.send(MpvState {
+            position: self.get_position().unwrap_or(0.0),
+            duration: self.get_duration().unwrap_or(0.0),
+            ts_label: self.get_ts_label(),
+            elapsed_label: self.get_elapsed_label(),
+            duration_label: self.get_duration_label(),
+        });
+    }
 
     /// Рендерит кадр: mpv рисует в FBO → очищаем экран → рисуем видео-текстуру
     pub fn render(&mut self, w: i32, h: i32) {
@@ -196,7 +220,10 @@ impl VideoUnderlay {
                 MpvRenderParam { type_: MPV_RENDER_PARAM_FLIP_Y, data: &flip_y as *const _ as *mut _ },
                 MpvRenderParam { type_: MPV_RENDER_PARAM_INVALID, data: std::ptr::null_mut() },
             ];
-            self.mpv_lib.render_context_render(self.render_ctx, rparams.as_ptr());
+            let rc = self.mpv_lib.render_context_render(self.render_ctx, rparams.as_ptr());
+            if rc != 0 {
+                eprintln!("[render] mpv_render_context_render error: {}", rc);
+            }
 
             gl.bind_framebuffer(glow::FRAMEBUFFER, None);
             gl.viewport(0, 0, w, h);

@@ -18,6 +18,10 @@ pub fn main() {
     // правильно идентифицировать приложение и применить правила фокуса
     slint::set_xdg_app_id("quatru").ok();
 
+    // Дебаг: показываем текущий бэкенд
+    let backend = std::env::var("SLINT_BACKEND").unwrap_or_else(|_| "<not set, auto-detect>".into());
+    eprintln!("[debug] SLINT_BACKEND={}", backend);
+
     // Аргументы командной строки: опциональный путь к файлу
     let mut args = std::env::args();
     args.next();
@@ -33,6 +37,8 @@ pub fn main() {
         new_position: 0.0,
         position_ackd: true,
         ts_label: "00:00:00 / 00:00:00".into(),
+        elapsed_label: "00:00".into(),
+        duration_label: "00:00".into(),
         window_width: 1200.0,
         window_height: 800.0,
     });
@@ -51,6 +57,28 @@ pub fn main() {
     let win = app.window();
     win.on_close_requested(move || std::process::exit(0));
 
+    // Callback из control bar: Play/Pause кнопка
+    let app_wk_pp = app.as_weak();
+    app.on_play_pause_requested(move || {
+        if let Some(a) = app_wk_pp.upgrade() {
+            let mut s = a.get_player_state();
+            s.is_paused = !s.is_paused;
+            a.set_player_state(s);
+        }
+    });
+
+    // Callback из control bar: Seek по таймлайну
+    let app_wk_seek = app.as_weak();
+    app.on_seek_requested(move |ratio: f32| {
+        if let Some(a) = app_wk_seek.upgrade() {
+            let mut s = a.get_player_state();
+            s.new_position = ratio * 100.0;
+            s.position_ackd = false;
+            s.seek_position = ratio;
+            a.set_player_state(s);
+        }
+    });
+
     // Таймер обновления UI: получает MpvState от mpv, обновляет прогресс и таймкод
     let app_wk_t = app.as_weak();
     slint::Timer::default().start(
@@ -61,6 +89,8 @@ pub fn main() {
                 if let Some(a) = app_wk_t.upgrade() {
                     let mut s = a.get_player_state();
                     s.ts_label = st.ts_label.into();
+                    s.elapsed_label = st.elapsed_label.into();
+                    s.duration_label = st.duration_label.into();
                     if st.duration > 0.0 {
                         s.seek_position = st.position / st.duration;
                     }

@@ -11,10 +11,16 @@
 Создать мультимедийный плеер (Аудио/Видео) с упором на запредельную скорость реакции (blazing fast) и премиальный темный UI (в стиле Spotify / DAW плагинов).
 
 # Стек
-- Rust (strict mode, no memory leaks)
-- Slint 1.9 (UI фреймворк)
-- libmpv (Backend, dynamic loading через libloading)
-- glow 0.16 (OpenGL обёртка)
+
+| Зависимость | Версия | Документация |
+|---|---|---|
+| slint | 1.15 | https://slint.dev, https://docs.rs/crate/slint/latest, https://github.com/slint-ui/slint |
+| slint-build | 1.15 | https://docs.rs/crate/slint-build/latest |
+| glow | 0.17 | https://github.com/grovesNL/glow, https://docs.rs/crate/glow/latest |
+| libloading | 0.9 | https://crates.io/crates/libloading/0.9.0, https://docs.rs/crate/libloading/latest |
+
+- **Rust** (strict mode, no memory leaks)
+- **libmpv** (Backend, dynamic loading через libloading)
 
 # База: Lumiere
 Референс-проект [Lumiere](https://github.com/vgarleanu/lumiere). Подход: mpv рендерит кадры в OpenGL-фреймбуфер, Slint рисует этот фреймбуфер как текстуру через `set_rendering_notifier`. UI-элементы накладываются поверх видео средствами Slint.
@@ -28,12 +34,22 @@
 # Правила работы
 - Каждый спринт начинается с прочтения: `QWEN.md`, `ARCHITECTURE.md`, `FEATURES.md`, `SPRINT-#.md`
 - Перед изменениями — изучить текущий код, не писать с нуля
-- Коммитить после каждого спринта с понятным сообщением
+- **ПЕРЕД написанием кода** — сначала изучить документацию зависимостей и примеры (поиск в Google/docs.rs), затем составить план, подвергнуть его самокритике, отрефакторить план, и только потом писать код
+- **НИКОГДА не коммитить** — git только для чтения (`git diff`, `git log`), коммитит только PO
+- После каждого спринта — **записать итог в текущий SPRINT-#.md** (блок «# Итог» в конце файла)
 - Не удалять существующие callback'и без проверки что они используются
 - Не менять работающую архитектуру без крайней необходимости
-- После изменений — `cargo build` и тест с реальным файлом
+- После изменений — `cargo build` и **попросить PO протестировать** с реальным файлом
+- **НЕ делать выводов о работоспособности UI/видео по exit code или логам** — AI не видит экран, только PO видит результат
 - Все цвета, размеры, шрифты — только в `Theme.slint`
 - `libmpv` НЕ линковать — только `libloading::dlopen`
+
+# Тестовые файлы
+Для проверки воспроизведения использовать файлы в корне проекта:
+- `example.mp4` — видео для тестов
+- `example.mkv` — видео для тестов
+- Файлы могут отсутствовать — перед тестом проверять `ls example.mp4 example.mkv 2>/dev/null`
+- Если файлов нет — запускать без файла (чёрный экран)
 
 # Критически важные правила (из ARCHITECTURE.md)
 - `app.on_esc_pressed()` — НИКОГДА не удалять
@@ -43,6 +59,7 @@
 - `render_context_create()` инициализирует mpv — НЕ вызывать `mpv_initialize()` вручную
 - `set_option_string` ДО `initialize()` — после `initialize()` опции игнорируются
 - TextInput поглощает ВСЕ `key-pressed` и `key-released` — включая ESC
+- **`Window.background` ДОЛЖЕН быть `transparent`** — иначе чёрный фон Slint перекроет видео (видео рендерится в BeforeRendering ДО отрисовки фона окна)
 
 # Структура проекта
 ```
@@ -71,13 +88,15 @@ quatru/
 См. `ARCHITECTURE.md` — подробное описание проблем, решений и антипаттернов.
 
 # Текущий статус
-Спринт 1 завершён. Плеер воспроизводит видео/аудио, имеет тёмный UI с контрол-баром, работает ESC для выхода, пробел для паузы, крестик для закрытия.
+Спринт 3 завершён. Плеер воспроизводит видео/аудио, имеет тёмный премиальный UI с контрол-баром: кастомная кнопка Play/Pause с анимациями, интерактивный TimelineSlider с seek, метки времени MM:SS. Работает ESC для выхода, пробел для паузы, крестик для закрытия.
 
 # Запуск
 ```bash
 # С видеофайлом:
-SLINT_BACKEND=GL cargo run -- path/to/video.mp4
+cargo run -- path/to/video.mp4
 
 # Без файла (чёрный экран):
-SLINT_BACKEND=GL cargo run
+cargo run
 ```
+
+`SLINT_BACKEND=GL` больше не требуется — Slint 1.15 автоматически выбирает OpenGL. Если автодетект не сработает, приложение покажет ошибку с инструкцией.
