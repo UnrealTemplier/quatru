@@ -15,8 +15,9 @@ export struct PlayerState {
 export component MainWindow inherits Window {
     width: Theme.window-width;
     height: Theme.window-height;
-    title: "";
+    title: "quatru";
     default-font-family: Theme.font-family;
+    forward-focus: key-handler;
 
     in-out property<PlayerState> player-state;
     callback esc-pressed();
@@ -25,15 +26,18 @@ export component MainWindow inherits Window {
     background: Theme.color-bg-primary;
 
     // FocusScope — первый в иерархии, перехватывает ESC ДО TextInput
-    FocusScope {
+    key-handler := FocusScope {
         x: 0px; y: 0px;
         width: parent.width;
         height: parent.height;
 
+        init => { self.focus(); }
+
         // capture-key-pressed вызывается ДО того как событие дойдёт до дочерних элементов
         capture-key-pressed(event) => {
             if (event.text == " ") {
-                return EventResult.reject;
+                root.player-state.is_paused = !root.player-state.is_paused;
+                return EventResult.accept;
             }
             // Все control-символы — передаём текст в Rust для анализа
             if (event.text < " ") {
@@ -43,16 +47,11 @@ export component MainWindow inherits Window {
             EventResult.reject
         }
 
-        // TextInput — получает фокус при клике
-        TextInput {
-            x: 0px; y: 0px;
+        // Вложенный FocusScope с key-pressed для удержания фокуса
+        keyboard-target := FocusScope {
             width: parent.width;
             height: parent.height;
-            color: #00000000;
-            text: "";
-            read-only: true;
-            enabled: true;
-
+            init => { self.focus(); }
             key-pressed(event) => {
                 if (event.text == " ") {
                     root.player-state.is_paused = !root.player-state.is_paused;
@@ -64,7 +63,7 @@ export component MainWindow inherits Window {
     }
 
     // Контрол-бар внизу экрана
-    Rectangle {
+    control-bar := Rectangle {
         background: Theme.color-bg-surface;
         height: Theme.control-bar-height;
         y: parent.height - self.height;
